@@ -1,136 +1,168 @@
 ---
-title       : Motivation and pre-requisites
-subtitle    : 
-author      : Jeffrey Leek
-job         : Johns Hopkins Bloomberg School of Public Health
-logo        : bloomberg_shield.png
-framework   : io2012        # {io2012, html5slides, shower, dzslides, ...}
-highlighter : highlight.js  # {highlight.js, prettify, highlight}
-hitheme     : tomorrow   # 
-url:
-  lib: ../../librariesNew
-  assets: ../../assets
-widgets     : [mathjax]            # {mathjax, quiz, bootstrap}
-mode        : selfcontained # {standalone, draft}
+title: "Practical Machine Learning: Prediction Model Assignment Write-up"
+author: "Ron Rick Chua"
+date: "Monday, August 18, 2014"
+
 ---
 
 
-```{r setup, cache = F, echo = F, message = F, warning = F, tidy = F}
-# make this an external chunk that can be included in any file
-options(width = 100)
-opts_chunk$set(message = F, error = F, warning = F, comment = NA, fig.align = 'center', dpi = 100, tidy = F, cache.path = '.cache/', fig.path = 'fig/')
+## Synopsis:
 
-options(xtable.type = 'html')
-knit_hooks$set(inline = function(x) {
-  if(is.numeric(x)) {
-    round(x, getOption('digits'))
-  } else {
-    paste(as.character(x), collapse = ', ')
-  }
-})
-knit_hooks$set(plot = knitr:::hook_plot_html)
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+We will use the data mentioned above to develop a predictive model for this classes.
+
+
+
+Loading library used.
+```{r}
+library(ggplot2)
+library(lattice)
+library(caret)
+library(randomForest)
+library(rpart)
+```
+Clearing Workspace
+```{r}
+rm(list=ls())
+```
+Loading the Data Sets of Testing and Training to R. 
+```{r}
+TrainingSet <-read.csv("pml-training.csv")
+TestingSet  <-read.csv("pml-testing.csv" )
 ```
 
 
-## About this course
 
-* This course covers the basic ideas behind machine learning/prediction
-  * Study design - training vs. test sets
-  * Conceptual issues - out of sample error, ROC curves
-  * Practical implementation - the caret package
-* What this course depends on
-  * The Data Scientist's Toolbox
-  * R Programming
-* What would be useful
-  * Exploratory analysis
-  * Reporting Data and Reproducible Research
-  * Regression models
+## Exploring the Data Set
+For Training Set:
+```{r}
+# Number of rows:
+nrow(TrainingSet)
 
----
+# Number of columns:
+ncol(TrainingSet)
 
-## Who predicts?
+#Summary details:
+summary(TrainingSet[,c(1:2,159:160)])
+```
+Using a Scatterplot Matrices for visual reference
+```{r}
+pairs(TrainingSet[1:10000,1:10])
+pairs(TrainingSet[1:10000,11:20])
+pairs(TrainingSet[1:10000,21:30])
+```
 
-* Local governments -> pension payments
-* Google -> whether you will click on an ad
-* Amazon -> what movies you will watch
-* Insurance companies -> what your risk of death is
-* Johns Hopkins -> who will succeed in their programs
+## Getting and Cleaning the Data Set
+There are 160 columns in the Training Set, and we will be excluding columns with NA values.
+```{r}
+NewTraining<-TrainingSet
+NewTraining[ NewTraining == '' | NewTraining == 'NA'] <- NA
+indx <-which(colSums(is.na(NewTraining))!=0)
+NewTraining<-NewTraining[, -indx]
+NewTraining<-NewTraining[,-(1:7)]
 
----
+```
+## Validate Data Set
+Creating a Data set that are Valid, This is for Cross validating with the Training Set.
+```{r}
+InTraining  <- createDataPartition(y=NewTraining$classe,p=0.70,list=FALSE)
+NewTraining <- NewTraining[InTraining,]
+ValidateSet <- NewTraining[-InTraining,]
+```
 
+## Prediction Model Set
+Random Forest we will be using to train our Prediction Model set to predict the weight lifting quality in the Training Set.
+```{r}
+Pmodel <- train(classe~., data=NewTraining, method = "rf", tuneLength = 1, ntree = 25)
+print(Pmodel)
+```
 
-## Why predict? Glory!
+## Evaluating the Model
+Using Confussion Matrix to evaluate the Prediction Model set versus the Validate Data set.
+```{r}
+confusionMatrix(predict(Pmodel, ValidateSet), ValidateSet$classe)
+```
 
-<img class=center src=../../assets/img/08_PredictionAndMachineLearning/volinsky.png height=450>
-
-
-[http://www.zimbio.com/photos/Chris+Volinsky](http://www.zimbio.com/photos/Chris+Volinsky)
-
-
-
----
-
-## Why predict? Riches!
-
-<img class=center src=../../assets/img/08_PredictionAndMachineLearning/heritage.png height=450>
-
-
-[http://www.heritagehealthprize.com/c/hhp](http://www.heritagehealthprize.com/c/hhp)
-
-
-
----
-
-## Why predict? For sport!
-
-<img class=center src=../../assets/img/08_PredictionAndMachineLearning/kaggle.png height=350>
-
-
-[http://www.kaggle.com/](http://www.kaggle.com/)
-
----
-
-## Why predict? To save lives!
-
-<img class=center src=../../assets/img/08_PredictionAndMachineLearning/oncotype.png height=350>
-
-[http://www.oncotypedx.com/en-US/Home](http://www.oncotypedx.com/en-US/Home)
-
----
-
-## A useful (if a bit advanced) book
-
-<img class=center src=../../assets/img/08_PredictionAndMachineLearning/elemlearn.png height=350>
+Visual Representation of accuracy
 
 
-[The elements of statistical learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/)
+```{r}
+plot(predict(Pmodel,newdata=ValidateSet[,-ncol(ValidateSet)]),ValidateSet$classe, xlab="Validate Set", ylab="Prediction Model Set",col = c("black","red", "blue","green","yellow"))
+```
+```
+Note on Class:
+A: Exactly according to the specification
+B: Throwing the elbows to the front
+C: Lifting the dumbbell only halfway
+D: Lowering the dumbbell only halfway
+E: Throwing the hips to the front
+```
 
----
-
-## A useful package
-
-<img class=center src=../../assets/img/08_PredictionAndMachineLearning/caret.png height=350>
-
-
-[http://caret.r-forge.r-project.org/](http://caret.r-forge.r-project.org/)
-
-
----
-
-## Machine learning (more advanced material)
-
-<img class=center src=../../assets/img/08_PredictionAndMachineLearning/machinelearning.png height=350>
+## Compuring for the Accuracy of the Model
+```{r}
+accurate <- c(as.numeric(predict(Pmodel,newdata=ValidateSet[,-ncol(ValidateSet)])==ValidateSet$classe))
+MAccuracy <- sum(accurate)*100/nrow(ValidateSet)
+message("Accuracy of Prediction Model set VS Validate Data set = ", format(round(MAccuracy, 2), nsmall=2),"%")
+```
+# Conclusion
+A 100% accuracy was computed here,  but caution must be taken due to the use of Random forest, tends to Overfitting.
 
 
-[https://www.coursera.org/course/ml](https://www.coursera.org/course/ml)
+```
 
 
----
+```
 
-## Even more resources
 
-* [List of machine learning resources on Quora](http://www.quora.com/Machine-Learning/What-are-some-good-resources-for-learning-about-machine-learning-Why)
-* [List of machine learning resources from Science](http://www.sciencemag.org/site/feature/data/compsci/machine_learning.xhtml)
-* [Advanced notes from MIT open courseware](http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-867-machine-learning-fall-2006/lecture-notes/)
-* [Advanced notes from CMU](http://www.stat.cmu.edu/~cshalizi/350/)
-* [Kaggle - machine learning competitions](http://www.kaggle.com/)
+
+# Predictions on the testing set:
+
+For Testing Set:
+```{r}
+# Number of rows:
+nrow(TestingSet)
+
+# Number of columns:
+ncol(TestingSet)
+
+# Summary details:
+summary(TestingSet[,c(1:2,159:160)])
+```
+## Results of the Prediction to Testing Set
+```{r}
+Ptest<-predict(Pmodel, TestingSet)
+print(Ptest)
+```
+
+
+```
+
+
+```
+
+# References
+
+
+The Data used for this project can be downloaded at:
+
+Training set
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+
+Test Set
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+I would like to cite Human Activity Recognition publication and the Major Collaborators:
+
+- Wallace Ugulino 
+- Eduardo Velloso
+- Hugo Fuks
+
+Which allows us to use their data set for our course project.
+
+Web Site: http://groupware.les.inf.puc-rio.br/har#ixzz3AR2M0igh
+
+
